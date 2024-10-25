@@ -149,8 +149,10 @@ use core::ops::{Add, AddAssign};
 use core::ops::{Mul, MulAssign};
 use core::ops::{Sub, SubAssign};
 
+use cfg_if::cfg_if;
+
 #[allow(unused_imports)]
-use prelude::*;
+use crate::prelude::*;
 
 use rand_core::{CryptoRng, RngCore};
 
@@ -163,32 +165,43 @@ use subtle::ConstantTimeEq;
 
 use zeroize::Zeroize;
 
-use backend;
-use constants;
+use crate::backend;
 
-/// An `UnpackedScalar` represents an element of the field GF(l), optimized for speed.
-///
-/// This is a type alias for one of the scalar types in the `backend`
-/// module.
-#[cfg(feature = "fiat_u32_backend")]
-type UnpackedScalar = backend::serial::fiat_u32::scalar::Scalar29;
-#[cfg(feature = "fiat_u64_backend")]
-type UnpackedScalar = backend::serial::fiat_u64::scalar::Scalar52;
+#[cfg(not(all(target_os = "zkvm", target_arch = "riscv32")))]
+use crate::constants;
 
-/// An `UnpackedScalar` represents an element of the field GF(l), optimized for speed.
-///
-/// This is a type alias for one of the scalar types in the `backend`
-/// module.
-#[cfg(feature = "u64_backend")]
-type UnpackedScalar = backend::serial::u64::scalar::Scalar52;
+cfg_if! {
+    if #[cfg(all(target_os = "zkvm", target_arch = "riscv32"))] {
+        /// An `UnpackedScalar` represents an element of the field GF(l), optimized for speed.
+        ///
+        /// This is a type alias for one of the scalar types in the `backend`
+        /// module.
+        type UnpackedScalar = backend::serial::risc0::scalar::ScalarR0;
+    } else {
+        /// An `UnpackedScalar` represents an element of the field GF(l), optimized for speed.
+        ///
+        /// This is a type alias for one of the scalar types in the `backend`
+        /// module.
+        #[cfg(feature = "fiat_u32_backend")]
+        type UnpackedScalar = backend::serial::fiat_u32::scalar::Scalar29;
+        #[cfg(feature = "fiat_u64_backend")]
+        type UnpackedScalar = backend::serial::fiat_u64::scalar::Scalar52;
 
-/// An `UnpackedScalar` represents an element of the field GF(l), optimized for speed.
-///
-/// This is a type alias for one of the scalar types in the `backend`
-/// module.
-#[cfg(feature = "u32_backend")]
-type UnpackedScalar = backend::serial::u32::scalar::Scalar29;
+        /// An `UnpackedScalar` represents an element of the field GF(l), optimized for speed.
+        ///
+        /// This is a type alias for one of the scalar types in the `backend`
+        /// module.
+        #[cfg(feature = "u64_backend")]
+        type UnpackedScalar = backend::serial::u64::scalar::Scalar52;
 
+        /// An `UnpackedScalar` represents an element of the field GF(l), optimized for speed.
+        ///
+        /// This is a type alias for one of the scalar types in the `backend`
+        /// module.
+        #[cfg(feature = "u32_backend")]
+        type UnpackedScalar = backend::serial::u32::scalar::Scalar29;
+    }
+}
 
 /// The `Scalar` struct holds an integer \\(s < 2\^{255} \\) which
 /// represents an element of \\(\mathbb Z / \ell\\).
@@ -319,15 +332,21 @@ impl<'a, 'b> Add<&'b Scalar> for &'a Scalar {
     type Output = Scalar;
     #[allow(non_snake_case)]
     fn add(self, _rhs: &'b Scalar) -> Scalar {
-        // The UnpackedScalar::add function produces reduced outputs
-        // if the inputs are reduced.  However, these inputs may not
-        // be reduced -- they might come from Scalar::from_bits.  So
-        // after computing the sum, we explicitly reduce it mod l
-        // before repacking.
-        let sum = UnpackedScalar::add(&self.unpack(), &_rhs.unpack());
-        let sum_R = UnpackedScalar::mul_internal(&sum, &constants::R);
-        let sum_mod_l = UnpackedScalar::montgomery_reduce(&sum_R);
-        sum_mod_l.pack()
+        cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_arch = "riscv32"))] {
+                UnpackedScalar::add(&self.unpack(), &_rhs.unpack()).pack()
+            } else {
+                // The UnpackedScalar::add function produces reduced outputs
+                // if the inputs are reduced.  However, these inputs may not
+                // be reduced -- they might come from Scalar::from_bits.  So
+                // after computing the sum, we explicitly reduce it mod l
+                // before repacking.
+                let sum = UnpackedScalar::add(&self.unpack(), &_rhs.unpack());
+                let sum_R = UnpackedScalar::mul_internal(&sum, &constants::R);
+                let sum_mod_l = UnpackedScalar::montgomery_reduce(&sum_R);
+                sum_mod_l.pack()
+            }
+        }
     }
 }
 
@@ -345,16 +364,22 @@ impl<'a, 'b> Sub<&'b Scalar> for &'a Scalar {
     type Output = Scalar;
     #[allow(non_snake_case)]
     fn sub(self, rhs: &'b Scalar) -> Scalar {
-        // The UnpackedScalar::sub function requires reduced inputs
-        // and produces reduced output. However, these inputs may not
-        // be reduced -- they might come from Scalar::from_bits.  So
-        // we explicitly reduce the inputs.
-        let self_R = UnpackedScalar::mul_internal(&self.unpack(), &constants::R);
-        let self_mod_l = UnpackedScalar::montgomery_reduce(&self_R);
-        let rhs_R = UnpackedScalar::mul_internal(&rhs.unpack(), &constants::R);
-        let rhs_mod_l = UnpackedScalar::montgomery_reduce(&rhs_R);
+        cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_arch = "riscv32"))] {
+                UnpackedScalar::sub(&self.unpack(), &rhs.unpack()).pack()
+            } else {
+                // The UnpackedScalar::sub function produces reduced outputs
+                // if the inputs are reduced.  However, these inputs may not
+                // be reduced -- they might come from Scalar::from_bits.  So
+                // we explicitly reduce the inputs.
+                let self_R = UnpackedScalar::mul_internal(&self.unpack(), &constants::R);
+                let self_mod_l = UnpackedScalar::montgomery_reduce(&self_R);
+                let rhs_R = UnpackedScalar::mul_internal(&rhs.unpack(), &constants::R);
+                let rhs_mod_l = UnpackedScalar::montgomery_reduce(&rhs_R);
 
-        UnpackedScalar::sub(&self_mod_l, &rhs_mod_l).pack()
+                UnpackedScalar::sub(&self_mod_l, &rhs_mod_l).pack()
+            }
+        }
     }
 }
 
@@ -364,9 +389,15 @@ impl<'a> Neg for &'a Scalar {
     type Output = Scalar;
     #[allow(non_snake_case)]
     fn neg(self) -> Scalar {
-        let self_R = UnpackedScalar::mul_internal(&self.unpack(), &constants::R);
-        let self_mod_l = UnpackedScalar::montgomery_reduce(&self_R);
-        UnpackedScalar::sub(&UnpackedScalar::zero(), &self_mod_l).pack()
+        cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_arch = "riscv32"))] {
+                UnpackedScalar::negate(&self.unpack()).pack()
+            } else {
+                let self_R = UnpackedScalar::mul_internal(&self.unpack(), &constants::R);
+                let self_mod_l = UnpackedScalar::montgomery_reduce(&self_R);
+                UnpackedScalar::sub(&UnpackedScalar::zero(), &self_mod_l).pack()
+            }
+        }
     }
 }
 
@@ -1103,8 +1134,16 @@ impl Scalar {
     #[allow(non_snake_case)]
     pub fn reduce(&self) -> Scalar {
         let x = self.unpack();
-        let xR = UnpackedScalar::mul_internal(&x, &constants::R);
-        let x_mod_l = UnpackedScalar::montgomery_reduce(&xR);
+
+        cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_arch = "riscv32"))] {
+                let x_mod_l = UnpackedScalar::reduce(&x);
+            } else {
+                let xR = UnpackedScalar::mul_internal(&x, &constants::R);
+                let x_mod_l = UnpackedScalar::montgomery_reduce(&xR);
+            }
+        }
+
         x_mod_l.pack()
     }
 
@@ -1202,7 +1241,8 @@ impl UnpackedScalar {
 #[cfg(test)]
 mod test {
     use super::*;
-    use constants;
+    #[cfg(not(all(target_os = "zkvm", target_arch = "riscv32")))]
+    use crate::constants;
 
     /// x = 2238329342913194256032495932344128051776374960164957527413114840482143558222
     pub static X: Scalar = Scalar{
@@ -1634,10 +1674,16 @@ mod test {
         assert_eq!(reduced.bytes, expected.bytes);
 
         //  (x + 2^256x) * R
-        let interim = UnpackedScalar::mul_internal(&UnpackedScalar::from_bytes_wide(&bignum),
-                                                   &constants::R);
-        // ((x + 2^256x) * R) / R  (mod l)
-        let montgomery_reduced = UnpackedScalar::montgomery_reduce(&interim);
+        cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_arch = "riscv32"))] {
+                let montgomery_reduced = UnpackedScalar::reduce(&UnpackedScalar::from_bytes_wide(&bignum));
+            } else {
+                let interim =
+                    UnpackedScalar::mul_internal(&UnpackedScalar::from_bytes_wide(&bignum), &constants::R);
+                // ((x + 2^256x) * R) / R  (mod l)
+                let montgomery_reduced = UnpackedScalar::montgomery_reduce(&interim);
+            }
+        }
 
         // The Montgomery reduced scalar should match the reduced one, as well as the expected
         assert_eq!(montgomery_reduced.0, reduced.unpack().0);

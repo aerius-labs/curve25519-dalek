@@ -109,47 +109,47 @@ use subtle::ConstantTimeEq;
 
 use zeroize::Zeroize;
 
-use constants;
+use crate::constants;
 
-use field::FieldElement;
-use scalar::Scalar;
+use crate::field::FieldElement;
+use crate::scalar::Scalar;
 
-use montgomery::MontgomeryPoint;
+use crate::montgomery::MontgomeryPoint;
 
-use backend::serial::curve_models::AffineNielsPoint;
-use backend::serial::curve_models::CompletedPoint;
-use backend::serial::curve_models::ProjectiveNielsPoint;
-use backend::serial::curve_models::ProjectivePoint;
+use crate::backend::serial::curve_models::AffineNielsPoint;
+use crate::backend::serial::curve_models::CompletedPoint;
+use crate::backend::serial::curve_models::ProjectiveNielsPoint;
+use crate::backend::serial::curve_models::ProjectivePoint;
 
-use window::LookupTable;
-use window::LookupTableRadix16;
-use window::LookupTableRadix32;
-use window::LookupTableRadix64;
-use window::LookupTableRadix128;
-use window::LookupTableRadix256;
+use crate::window::LookupTable;
+use crate::window::LookupTableRadix16;
+use crate::window::LookupTableRadix32;
+use crate::window::LookupTableRadix64;
+use crate::window::LookupTableRadix128;
+use crate::window::LookupTableRadix256;
 
 #[allow(unused_imports)]
-use prelude::*;
+use crate::prelude::*;
 
-use traits::BasepointTable;
-use traits::ValidityCheck;
-use traits::{Identity, IsIdentity};
+use crate::traits::BasepointTable;
+use crate::traits::ValidityCheck;
+use crate::traits::{Identity, IsIdentity};
 
 #[cfg(any(feature = "alloc", feature = "std"))]
-use traits::MultiscalarMul;
+use crate::traits::MultiscalarMul;
 #[cfg(any(feature = "alloc", feature = "std"))]
-use traits::{VartimeMultiscalarMul, VartimePrecomputedMultiscalarMul};
+use crate::traits::{VartimeMultiscalarMul, VartimePrecomputedMultiscalarMul};
 
 #[cfg(not(all(
     feature = "simd_backend",
     any(target_feature = "avx2", target_feature = "avx512ifma")
 )))]
-use backend::serial::scalar_mul;
+use crate::backend::serial::scalar_mul;
 #[cfg(all(
     feature = "simd_backend",
     any(target_feature = "avx2", target_feature = "avx512ifma")
 ))]
-use backend::vector::scalar_mul;
+use crate::backend::vector::scalar_mul;
 
 // ------------------------------------------------------------------------
 // Compressed points
@@ -1203,10 +1203,11 @@ impl Debug for EdwardsPoint {
 
 #[cfg(test)]
 mod test {
-    use field::FieldElement;
-    use scalar::Scalar;
+    use cfg_if::cfg_if;
+    use crate::field::FieldElement;
+    use crate::scalar::Scalar;
     use subtle::ConditionallySelectable;
-    use constants;
+    use crate::constants;
     use super::*;
 
     /// X coordinate of the basepoint.
@@ -1646,7 +1647,7 @@ mod test {
     fn vartime_precomputed_vs_nonprecomputed_multiscalar() {
         let mut rng = rand::thread_rng();
 
-        let B = &::constants::ED25519_BASEPOINT_TABLE;
+        let B = &constants::ED25519_BASEPOINT_TABLE;
 
         let static_scalars = (0..128)
             .map(|_| Scalar::random(&mut rng))
@@ -1673,7 +1674,7 @@ mod test {
             &dynamic_points,
         );
 
-        use traits::VartimeMultiscalarMul;
+        use crate::traits::VartimeMultiscalarMul;
         let Q = EdwardsPoint::vartime_multiscalar_mul(
             static_scalars.iter().chain(dynamic_scalars.iter()),
             static_points.iter().chain(dynamic_points.iter()),

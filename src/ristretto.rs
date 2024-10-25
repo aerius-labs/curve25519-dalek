@@ -170,8 +170,8 @@ use rand_core::{CryptoRng, RngCore};
 use digest::generic_array::typenum::U64;
 use digest::Digest;
 
-use constants;
-use field::FieldElement;
+use crate::constants;
+use crate::field::FieldElement;
 
 use subtle::Choice;
 use subtle::ConditionallySelectable;
@@ -180,28 +180,28 @@ use subtle::ConstantTimeEq;
 
 use zeroize::Zeroize;
 
-use edwards::EdwardsBasepointTable;
-use edwards::EdwardsPoint;
+use crate::edwards::EdwardsBasepointTable;
+use crate::edwards::EdwardsPoint;
 
 #[allow(unused_imports)]
-use prelude::*;
+use crate::prelude::*;
 
-use scalar::Scalar;
+use crate::scalar::Scalar;
 
-use traits::Identity;
+use crate::traits::Identity;
 #[cfg(any(feature = "alloc", feature = "std"))]
-use traits::{MultiscalarMul, VartimeMultiscalarMul, VartimePrecomputedMultiscalarMul};
+use crate::traits::{MultiscalarMul, VartimeMultiscalarMul, VartimePrecomputedMultiscalarMul};
 
 #[cfg(not(all(
     feature = "simd_backend",
     any(target_feature = "avx2", target_feature = "avx512ifma")
 )))]
-use backend::serial::scalar_mul;
+use crate::backend::serial::scalar_mul;
 #[cfg(all(
     feature = "simd_backend",
     any(target_feature = "avx2", target_feature = "avx512ifma")
 ))]
-use backend::vector::scalar_mul;
+use crate::backend::vector::scalar_mul;
 
 // ------------------------------------------------------------------------
 // Compressed points
@@ -624,7 +624,7 @@ impl RistrettoPoint {
         let N_t = &(&(&c * &(&r - &one)) * &d_minus_one_sq) - &D;
         let s_sq = s.square();
 
-        use backend::serial::curve_models::CompletedPoint;
+        use crate::backend::serial::curve_models::CompletedPoint;
 
         // The conversion from W_i is exactly the conversion from P1xP1.
         RistrettoPoint(CompletedPoint{
@@ -1103,12 +1103,13 @@ impl Zeroize for RistrettoPoint {
 
 #[cfg(test)]
 mod test {
+    use cfg_if::cfg_if;
     use rand_core::OsRng;
 
-    use scalar::Scalar;
-    use constants;
-    use edwards::CompressedEdwardsY;
-    use traits::{Identity};
+    use crate::scalar::Scalar;
+    use crate::constants;
+    use crate::edwards::CompressedEdwardsY;
+    use crate::traits::{Identity};
     use super::*;
 
     #[test]
@@ -1254,8 +1255,14 @@ mod test {
     #[test]
     fn four_torsion_random() {
         let mut rng = OsRng;
-        let B = &constants::RISTRETTO_BASEPOINT_TABLE;
-        let P = B * &Scalar::random(&mut rng);
+        cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_arch = "riscv32"))] {
+                let B = constants::RISTRETTO_BASEPOINT_POINT;
+            } else {
+                let B = constants::RISTRETTO_BASEPOINT_TABLE;
+            }
+        }
+        let P = &B * &Scalar::random(&mut rng);
         let P_coset = P.coset4();
         for i in 0..4 {
             assert_eq!(P, RistrettoPoint(P_coset[i]));
@@ -1316,9 +1323,15 @@ mod test {
     #[test]
     fn random_roundtrip() {
         let mut rng = OsRng;
-        let B = &constants::RISTRETTO_BASEPOINT_TABLE;
+        cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_arch = "riscv32"))] {
+                let B = constants::RISTRETTO_BASEPOINT_POINT;
+            } else {
+                let B = constants::RISTRETTO_BASEPOINT_TABLE;
+            }
+        }
         for _ in 0..100 {
-            let P = B * &Scalar::random(&mut rng);
+            let P = &B * &Scalar::random(&mut rng);
             let compressed_P = P.compress();
             let Q = compressed_P.decompress().unwrap();
             assert_eq!(P, Q);
@@ -1343,7 +1356,13 @@ mod test {
     fn vartime_precomputed_vs_nonprecomputed_multiscalar() {
         let mut rng = rand::thread_rng();
 
-        let B = &::constants::RISTRETTO_BASEPOINT_TABLE;
+        cfg_if! {
+            if #[cfg(all(target_os = "zkvm", target_arch = "riscv32"))] {
+                let B = constants::RISTRETTO_BASEPOINT_POINT;
+            } else {
+                let B = constants::RISTRETTO_BASEPOINT_TABLE;
+            }
+        }
 
         let static_scalars = (0..128)
             .map(|_| Scalar::random(&mut rng))
@@ -1359,8 +1378,8 @@ mod test {
             .map(|s| s * s)
             .sum();
 
-        let static_points = static_scalars.iter().map(|s| s * B).collect::<Vec<_>>();
-        let dynamic_points = dynamic_scalars.iter().map(|s| s * B).collect::<Vec<_>>();
+        let static_points = static_scalars.iter().map(|s| s * &B).collect::<Vec<_>>();
+        let dynamic_points = dynamic_scalars.iter().map(|s| s * &B).collect::<Vec<_>>();
 
         let precomputation = VartimeRistrettoPrecomputation::new(static_points.iter());
 
@@ -1370,13 +1389,13 @@ mod test {
             &dynamic_points,
         );
 
-        use traits::VartimeMultiscalarMul;
+        use crate::traits::VartimeMultiscalarMul;
         let Q = RistrettoPoint::vartime_multiscalar_mul(
             static_scalars.iter().chain(dynamic_scalars.iter()),
             static_points.iter().chain(dynamic_points.iter()),
         );
 
-        let R = &check_scalar * B;
+        let R = &check_scalar * &B;
 
         assert_eq!(P.compress(), R.compress());
         assert_eq!(Q.compress(), R.compress());

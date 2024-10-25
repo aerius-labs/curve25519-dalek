@@ -28,20 +28,28 @@
 
 #![allow(non_snake_case)]
 
-use edwards::CompressedEdwardsY;
-use ristretto::RistrettoPoint;
-use ristretto::CompressedRistretto;
-use montgomery::MontgomeryPoint;
-use scalar::Scalar;
+use cfg_if::cfg_if;
 
-#[cfg(feature = "fiat_u32_backend")]
-pub use backend::serial::fiat_u32::constants::*;
-#[cfg(feature = "fiat_u64_backend")]
-pub use backend::serial::fiat_u64::constants::*;
-#[cfg(feature = "u64_backend")]
-pub use backend::serial::u64::constants::*;
-#[cfg(feature = "u32_backend")]
-pub use backend::serial::u32::constants::*;
+use crate::edwards::CompressedEdwardsY;
+use crate::ristretto::RistrettoPoint;
+use crate::ristretto::CompressedRistretto;
+use crate::montgomery::MontgomeryPoint;
+use crate::scalar::Scalar;
+
+cfg_if! {
+    if  #[cfg(all(target_os = "zkvm", target_arch = "riscv32"))] {
+        pub use crate::backend::serial::risc0::constants::*;
+    } else {
+        #[cfg(feature = "fiat_u32_backend")]
+        pub use crate::backend::serial::fiat_u32::constants::*;
+        #[cfg(feature = "fiat_u64_backend")]
+        pub use crate::backend::serial::fiat_u64::constants::*;
+        #[cfg(feature = "u64_backend")]
+        pub use crate::backend::serial::u64::constants::*;
+        #[cfg(feature = "u32_backend")]
+        pub use crate::backend::serial::u32::constants::*;
+    }
+}
 
 /// The Ed25519 basepoint, in `CompressedEdwardsY` format.
 ///
@@ -88,16 +96,19 @@ pub const BASEPOINT_ORDER: Scalar = Scalar{
     ],
 };
 
-use ristretto::RistrettoBasepointTable;
+#[cfg(not(all(target_os = "zkvm", target_arch = "riscv32")))]
+use crate::ristretto::RistrettoBasepointTable;
+
 /// The Ristretto basepoint, as a `RistrettoBasepointTable` for scalar multiplication.
+#[cfg(not(all(target_os = "zkvm", target_arch = "riscv32")))]
 pub const RISTRETTO_BASEPOINT_TABLE: RistrettoBasepointTable
     = RistrettoBasepointTable(ED25519_BASEPOINT_TABLE);
 
 #[cfg(test)]
 mod test {
-    use field::FieldElement;
-    use traits::{IsIdentity, ValidityCheck};
-    use constants;
+    use crate::field::FieldElement;
+    use crate::traits::{IsIdentity, ValidityCheck};
+    use crate::constants;
 
     #[test]
     fn test_eight_torsion() {
@@ -148,7 +159,7 @@ mod test {
     #[test]
     #[cfg(feature = "u32_backend")]
     fn test_d_vs_ratio() {
-        use backend::serial::u32::field::FieldElement2625;
+        use crate::backend::serial::u32::field::FieldElement2625;
         let a = -&FieldElement2625([121665,0,0,0,0,0,0,0,0,0]);
         let b =   FieldElement2625([121666,0,0,0,0,0,0,0,0,0]);
         let d = &a * &b.invert();
@@ -159,11 +170,31 @@ mod test {
 
     /// Test that d = -121665/121666
     #[test]
-    #[cfg(feature = "u64_backend")]
+    #[cfg(all(feature = "u64_backend", not(target_os = "zkvm")))]
     fn test_d_vs_ratio() {
-        use backend::serial::u64::field::FieldElement51;
+        use crate::backend::serial::u64::field::FieldElement51;
         let a = -&FieldElement51([121665,0,0,0,0]);
         let b =   FieldElement51([121666,0,0,0,0]);
+        let d = &a * &b.invert();
+        let d2 = &d + &d;
+        assert_eq!(d, constants::EDWARDS_D);
+        assert_eq!(d2, constants::EDWARDS_D2);
+    }
+
+
+    /// Test that d = -121665/121666
+    #[test]
+    #[cfg(all(target_os = "zkvm", target_arch = "riscv32"))]
+    fn test_d_vs_ratio() {
+        use crate::backend::serial::risc0::field::FieldElementR0;
+        use crypto_bigint::U256;
+
+        let a = -&FieldElementR0(U256::from_be_hex(
+            "000000000000000000000000000000000000000000000000000000000001db41",
+        ));
+        let b = FieldElementR0(U256::from_be_hex(
+            "000000000000000000000000000000000000000000000000000000000001db42",
+        ));
         let d = &a * &b.invert();
         let d2 = &d + &d;
         assert_eq!(d, constants::EDWARDS_D);

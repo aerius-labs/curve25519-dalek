@@ -13,11 +13,11 @@
 //! and useful field elements like `sqrt(-1)`), as well as
 //! lookup tables of pre-computed points.
 
-use backend::serial::curve_models::AffineNielsPoint;
+use crate::backend::serial::curve_models::AffineNielsPoint;
 use super::field::FieldElement2625;
 use super::scalar::Scalar29;
-use edwards::{EdwardsBasepointTable, EdwardsPoint};
-use window::{LookupTable, NafLookupTable8};
+use crate::edwards::{EdwardsBasepointTable, EdwardsPoint};
+use crate::window::{LookupTable, NafLookupTable8};
 
 /// The value of minus one, equal to `-&FieldElement::one()`
 pub(crate) const MINUS_ONE: FieldElement2625 = FieldElement2625([

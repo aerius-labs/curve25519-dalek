@@ -23,6 +23,8 @@
 //! Note: at this time the `u32` and `u64` backends cannot be built
 //! together.
 
+use cfg_if::cfg_if;
+
 #[cfg(not(any(
     feature = "u32_backend",
     feature = "u64_backend",
@@ -34,17 +36,24 @@ compile_error!(
      please enable one of: u32_backend, u64_backend, fiat_u32_backend, fiat_u64_backend"
 );
 
-#[cfg(feature = "u32_backend")]
-pub mod u32;
+cfg_if! {
+    if #[cfg(all(target_os = "zkvm", target_arch = "riscv32"))] {
+        pub mod risc0;
 
-#[cfg(feature = "u64_backend")]
-pub mod u64;
+    } else {
+        #[cfg(feature = "u32_backend")]
+        pub mod u32;
 
-#[cfg(feature = "fiat_u32_backend")]
-pub mod fiat_u32;
+        #[cfg(feature = "u64_backend")]
+        pub mod u64;
 
-#[cfg(feature = "fiat_u64_backend")]
-pub mod fiat_u64;
+        #[cfg(feature = "fiat_u32_backend")]
+        pub mod fiat_u32;
+
+        #[cfg(feature = "fiat_u64_backend")]
+        pub mod fiat_u64;
+    }
+}
 
 pub mod curve_models;
 
@@ -53,3 +62,5 @@ pub mod curve_models;
     any(target_feature = "avx2", target_feature = "avx512ifma")
 )))]
 pub mod scalar_mul;
+
+

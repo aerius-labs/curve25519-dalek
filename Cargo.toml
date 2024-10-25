@@ -33,29 +33,46 @@ travis-ci = { repository = "dalek-cryptography/curve25519-dalek", branch = "mast
 [dev-dependencies]
 sha2 = { version = "0.9", default-features = false }
 bincode = "1"
-criterion = { version = "0.3.0", features = ["html_reports"] }
 hex = "0.4.2"
 rand = "0.7"
+
+[target.'cfg(not(target_os = "zkvm"))'.dev-dependencies]
+criterion = { version = "0.3.0", features = ["html_reports"] }
 
 [[bench]]
 name = "dalek_benchmarks"
 harness = false
 
 [dependencies]
+
 rand_core = { version = "0.5", default-features = false }
 byteorder = { version = "^1.2.3", default-features = false, features = ["i128"] }
 digest = { version = "0.9", default-features = false }
 subtle = { version = "^2.2.1", default-features = false }
 serde = { version = "1.0", default-features = false, optional = true, features = ["derive"] }
+hex = "0.4.2"
 # The original packed_simd package was orphaned, see
 # https://github.com/rust-lang/packed_simd/issues/303#issuecomment-701361161
 packed_simd = { version = "0.3.4", package = "packed_simd_2", features = ["into_bits"], optional = true }
-zeroize = { version = ">=1, <1.4", default-features = false }
+zeroize = { version = ">=1, <1.4", default-features = false, optional = true }
 fiat-crypto = { version = "0.1.6", optional = true}
+cfg-if = "1"
+
+[target.'cfg(target_os = "zkvm")'.dependencies]
+crypto-bigint = { version = "0.5.5", default-features = false, features = ["zeroize"] }
+getrandom = { version = "0.1.16", features = ["dummy"] }
+
+[patch.crates-io.crypto-bigint]
+git = "https://github.com/risc0/RustCrypto-crypto-bigint"
+tag = "v0.5.5-risczero.0"
+
+[patch.crates-io.sha2]
+git = "https://github.com/risc0/RustCrypto-hashes"
+tag = "sha2-v0.9.9-risczero.0"
 
 [features]
 nightly = ["subtle/nightly"]
-default = ["std", "u64_backend"]
+default = ["std", "u64_backend", "zeroize"]
 std = ["alloc", "subtle/std", "rand_core/std"]
 alloc = ["zeroize/alloc"]
 

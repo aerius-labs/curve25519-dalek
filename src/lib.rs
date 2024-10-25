@@ -277,6 +277,11 @@ extern crate bincode;
 #[cfg(feature = "serde")]
 extern crate serde;
 
+extern crate cfg_if;
+
+#[cfg(all(target_os = "zkvm", target_arch = "riscv32"))]
+extern crate crypto_bigint;
+
 // Internal macros. Must come first!
 #[macro_use]
 pub(crate) mod macros;
